@@ -2,7 +2,6 @@ const http = require("http");
 const https = require("https");
 const { URL } = require("url");
 const { logEvent } = require("./logger");
-const { mapDepot, mapVehicle } = require("./validators");
 
 const SERVICE_ROOT = "http://20.207.122.201/evaluation-service";
 const REQUEST_TIMEOUT = 8000;
@@ -112,94 +111,39 @@ function makeHeaders(authHeader) {
   return headers;
 }
 
-async function loadDepots(authHeader) {
-  await logEvent("backend", "info", "repository", "fetching depots");
-  const result = await requestJson(`${SERVICE_ROOT}/depots`, {
+async function loadNotifications(authHeader) {
+  await logEvent("backend", "info", "repository", "fetching notifications");
+  const result = await requestJson(`${SERVICE_ROOT}/notifications`, {
     method: "GET",
     headers: makeHeaders(authHeader),
   });
 
   if (!result.ok) {
-    const error = new Error("depots_fetch_failed");
+    const error = new Error("notifications_fetch_failed");
     error.status = result.status;
-    error.source = "depots";
+    error.source = "notifications";
     error.details = result.data || result.raw || null;
     await logEvent(
       "backend",
       "error",
       "repository",
-      `depots fetch failed status ${result.status}`
+      `notifications fetch failed status ${result.status}`
     );
     throw error;
   }
 
-  const depotItems = result.data && Array.isArray(result.data.depots)
-    ? result.data.depots
+  const items = result.data && Array.isArray(result.data.notifications)
+    ? result.data.notifications
     : [];
-  const depots = depotItems.map(mapDepot).filter(Boolean);
-  const droppedCount = depotItems.length - depots.length;
-
-  if (droppedCount > 0) {
-    await logEvent(
-      "backend",
-      "warn",
-      "repository",
-      `depots normalized with ${droppedCount} invalid entries`
-    );
-  }
 
   await logEvent(
     "backend",
     "info",
     "repository",
-    `depots fetched count ${depots.length}`
+    `notifications fetched count ${items.length}`
   );
-  return depots;
+
+  return items;
 }
 
-async function loadVehicles(authHeader) {
-  await logEvent("backend", "info", "repository", "fetching vehicles");
-  const result = await requestJson(`${SERVICE_ROOT}/vehicles`, {
-    method: "GET",
-    headers: makeHeaders(authHeader),
-  });
-
-  if (!result.ok) {
-    const error = new Error("vehicles_fetch_failed");
-    error.status = result.status;
-    error.source = "vehicles";
-    error.details = result.data || result.raw || null;
-    await logEvent(
-      "backend",
-      "error",
-      "repository",
-      `vehicles fetch failed status ${result.status}`
-    );
-    throw error;
-  }
-
-  const vehicleItems = result.data && Array.isArray(result.data.vehicles)
-    ? result.data.vehicles
-    : [];
-  const vehicles = vehicleItems.map(mapVehicle).filter(Boolean);
-  const droppedCount = vehicleItems.length - vehicles.length;
-
-  if (droppedCount > 0) {
-    await logEvent(
-      "backend",
-      "warn",
-      "repository",
-      `vehicles normalized with ${droppedCount} invalid entries`
-    );
-  }
-
-  await logEvent(
-    "backend",
-    "info",
-    "repository",
-    `vehicles fetched count ${vehicles.length}`
-  );
-  return vehicles;
-}
-
-module.exports = { loadDepots, loadVehicles };
+module.exports = { loadNotifications };

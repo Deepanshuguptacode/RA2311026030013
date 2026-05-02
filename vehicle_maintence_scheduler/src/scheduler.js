@@ -1,65 +1,65 @@
-const { safeLog } = require("./logger");
+const { logEvent } = require("./logger");
 
-function buildSchedule(vehicles, capacity) {
-  const cap = Math.max(0, Math.floor(Number(capacity) || 0));
-  safeLog(
+function createPlan(tasks, capacity) {
+  const maxHours = Math.max(0, Math.floor(Number(capacity) || 0));
+  logEvent(
     "backend",
     "debug",
     "service",
-    `schedule start capacity ${cap} vehicles ${vehicles.length}`
+    `schedule start capacity ${maxHours} vehicles ${tasks.length}`
   );
 
-  if (cap === 0 || vehicles.length === 0) {
+  if (maxHours === 0 || tasks.length === 0) {
     return { tasks: [], totalImpact: 0, totalDuration: 0 };
   }
 
-  const n = vehicles.length;
-  const dp = new Array(cap + 1).fill(0);
-  const keep = Array.from({ length: n }, () => new Array(cap + 1).fill(false));
+  const taskCount = tasks.length;
+  const bestScores = new Array(maxHours + 1).fill(0);
+  const pickMatrix = Array.from({ length: taskCount }, () => new Array(maxHours + 1).fill(false));
 
-  for (let i = 0; i < n; i += 1) {
-    const duration = Math.max(0, Math.floor(vehicles[i].Duration));
-    const impact = Math.max(0, Math.floor(vehicles[i].Impact));
+  for (let idx = 0; idx < taskCount; idx += 1) {
+    const duration = Math.max(0, Math.floor(tasks[idx].Duration));
+    const impact = Math.max(0, Math.floor(tasks[idx].Impact));
     if (duration === 0) {
       continue;
     }
-    for (let w = cap; w >= duration; w -= 1) {
-      const candidate = dp[w - duration] + impact;
-      if (candidate > dp[w]) {
-        dp[w] = candidate;
-        keep[i][w] = true;
+    for (let hours = maxHours; hours >= duration; hours -= 1) {
+      const candidate = bestScores[hours - duration] + impact;
+      if (candidate > bestScores[hours]) {
+        bestScores[hours] = candidate;
+        pickMatrix[idx][hours] = true;
       }
     }
   }
 
-  let w = cap;
-  const selected = [];
-  for (let i = n - 1; i >= 0; i -= 1) {
-    if (keep[i][w]) {
-      const vehicle = vehicles[i];
-      selected.push(vehicle);
-      w -= Math.max(0, Math.floor(vehicle.Duration));
+  let remaining = maxHours;
+  const chosenTasks = [];
+  for (let idx = taskCount - 1; idx >= 0; idx -= 1) {
+    if (pickMatrix[idx][remaining]) {
+      const task = tasks[idx];
+      chosenTasks.push(task);
+      remaining -= Math.max(0, Math.floor(task.Duration));
     }
   }
-  selected.reverse();
+  chosenTasks.reverse();
 
-  const totalDuration = selected.reduce(
-    (sum, vehicle) => sum + vehicle.Duration,
+  const totalDuration = chosenTasks.reduce(
+    (sum, task) => sum + task.Duration,
     0
   );
-  const totalImpact = selected.reduce(
-    (sum, vehicle) => sum + vehicle.Impact,
+  const totalImpact = chosenTasks.reduce(
+    (sum, task) => sum + task.Impact,
     0
   );
 
-  safeLog(
+  logEvent(
     "backend",
     "info",
     "service",
-    `schedule built duration ${totalDuration} impact ${totalImpact} tasks ${selected.length}`
+    `schedule built duration ${totalDuration} impact ${totalImpact} tasks ${chosenTasks.length}`
   );
 
-  return { tasks: selected, totalDuration, totalImpact };
+  return { tasks: chosenTasks, totalDuration, totalImpact };
 }
 
-module.exports = { buildSchedule };
+module.exports = { createPlan };

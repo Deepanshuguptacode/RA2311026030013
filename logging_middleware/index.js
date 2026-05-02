@@ -2,11 +2,11 @@ const http = require("http");
 const https = require("https");
 const { URL } = require("url");
 
-const DEFAULT_BASE_URL = "http://20.207.122.201/evaluation-service";
-const ALLOWED_STACKS = new Set(["backend"]);
-const ALLOWED_LEVELS = new Set(["debug", "info", "warn", "error", "fatal"]);
+const LOG_SERVICE_URL = "http://20.207.122.201/evaluation-service";
+const STACK_ALLOWLIST = new Set(["backend"]);
+const LEVEL_ALLOWLIST = new Set(["debug", "info", "warn", "error", "fatal"]);
 
-const BACKEND_PACKAGES = new Set([
+const BACKEND_PACKAGE_SET = new Set([
   "cache",
   "controller",
   "cron_job",
@@ -18,47 +18,50 @@ const BACKEND_PACKAGES = new Set([
   "service",
 ]);
 
-const SHARED_PACKAGES = new Set(["auth", "config", "middleware", "utils"]);
+const SHARED_PACKAGE_SET = new Set(["auth", "config", "middleware", "utils"]);
 
-const DEFAULT_AUTH_TOKEN = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiYXVkIjoiaHR0cDovLzIwLjI0NC41Ni4xNDQvZXZhbHVhdGlvbi1zZXJ2aWNlIiwiZW1haWwiOiJkZzM4NDVAc3JtaXN0LmVkdS5pbiIsImV4cCI6MTc3NzY5OTAxNSwiaWF0IjoxNzc3Njk4MTE1LCJpc3MiOiJBZmZvcmQgTWVkaWNhbCBUZWNobm9sb2dpZXMgUHJpdmF0ZSBMaW1pdGVkIiwianRpIjoiMmRmYWMzZTYtOWFmMy00NjhmLTliMDQtZjgyYThlYmY1N2M2IiwibG9jYWxlIjoiZW4tSU4iLCJuYW1lIjoiZGVlcGFuc2h1IGd1cHRhIiwic3ViIjoiYWY0NzRkZjItNGFkYi00ZmNjLWJkY2QtMmZmNzY4NzljNzdmIn0sImVtYWlsIjoiZGczODQ1QHNybWlzdC5lZHUuaW4iLCJuYW1lIjoiZGVlcGFuc2h1IGd1cHRhIiwicm9sbE5vIjoicmEyMzExMDI2MDMwMDEzIiwiYWNjZXNzQ29kZSI6IlFrYnB4SCIsImNsaWVudElEIjoiYWY0NzRkZjItNGFkYi00ZmNjLWJkY2QtMmZmNzY4NzljNzdmIiwiY2xpZW50U2VjcmV0IjoiZnJBVG1zWVpxWVNrdGJtWCJ9.2ZBa-af8s-POju8rdUDL7LegcepTRBVAVMfD69jrUzk";
+const FALLBACK_AUTH_TOKEN = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiYXVkIjoiaHR0cDovLzIwLjI0NC41Ni4xNDQvZXZhbHVhdGlvbi1zZXJ2aWNlIiwiZW1haWwiOiJkZzM4NDVAc3JtaXN0LmVkdS5pbiIsImV4cCI6MTc3NzY5OTAxNSwiaWF0IjoxNzc3Njk4MTE1LCJpc3MiOiJBZmZvcmQgTWVkaWNhbCBUZWNobm9sb2dpZXMgUHJpdmF0ZSBMaW1pdGVkIiwianRpIjoiMmRmYWMzZTYtOWFmMy00NjhmLTliMDQtZjgyYThlYmY1N2M2IiwibG9jYWxlIjoiZW4tSU4iLCJuYW1lIjoiZGVlcGFuc2h1IGd1cHRhIiwic3ViIjoiYWY0NzRkZjItNGFkYi00ZmNjLWJkY2QtMmZmNzY4NzljNzdmIn0sImVtYWlsIjoiZGczODQ1QHNybWlzdC5lZHUuaW4iLCJuYW1lIjoiZGVlcGFuc2h1IGd1cHRhIiwicm9sbE5vIjoicmEyMzExMDI2MDMwMDEzIiwiYWNjZXNzQ29kZSI6IlFrYnB4SCIsImNsaWVudElEIjoiYWY0NzRkZjItNGFkYi00ZmNjLWJkY2QtMmZmNzY4NzljNzdmIiwiY2xpZW50U2VjcmV0IjoiZnJBVG1zWVpxWVNrdGJtWCJ9.2ZBa-af8s-POju8rdUDL7LegcepTRBVAVMfD69jrUzk";
 
-const config = {
-  baseUrl: DEFAULT_BASE_URL,
+const runtimeConfig = {
+  baseUrl: LOG_SERVICE_URL,
   timeoutMs: 8000,
-  authToken: DEFAULT_AUTH_TOKEN,
+  authToken: FALLBACK_AUTH_TOKEN,
 };
 
-function configureLogging(options = {}) {
+function setLogConfig(options = {}) {
   if (options.baseUrl && typeof options.baseUrl === "string") {
-    config.baseUrl = options.baseUrl;
+    runtimeConfig.baseUrl = options.baseUrl;
   }
   if (Number.isInteger(options.timeoutMs) && options.timeoutMs > 0) {
-    config.timeoutMs = options.timeoutMs;
+    runtimeConfig.timeoutMs = options.timeoutMs;
   }
   if (typeof options.authToken === "string") {
-    config.authToken = options.authToken;
+    runtimeConfig.authToken = options.authToken;
   }
 }
 
-function normalizeValue(value) {
+function normalizeText(value) {
   if (typeof value !== "string") {
     return "";
   }
   return value.trim().toLowerCase();
 }
 
-function isPackageAllowed(stack, packageName) {
-  if (SHARED_PACKAGES.has(packageName)) {
+function isAllowedPackage(stackName, packageName) {
+  if (SHARED_PACKAGE_SET.has(packageName)) {
     return true;
   }
-  if (stack === "backend") {
-    return BACKEND_PACKAGES.has(packageName);
+  if (stackName === "backend") {
+    return BACKEND_PACKAGE_SET.has(packageName);
   }
   return false;
 }
 
-function getAuthHeader() {
-  const token = typeof config.authToken === "string" ? config.authToken.trim() : "";
+function buildAuthHeader() {
+  const token =
+    typeof runtimeConfig.authToken === "string"
+      ? runtimeConfig.authToken.trim()
+      : "";
   if (!token) {
     return "";
   }
@@ -68,7 +71,7 @@ function getAuthHeader() {
   return `Bearer ${token}`;
 }
 
-function safeJsonParse(text) {
+function parseJsonSafely(text) {
   if (!text) {
     return null;
   }
@@ -79,10 +82,10 @@ function safeJsonParse(text) {
   }
 }
 
-function requestJsonWithHttp(url, options) {
+function requestJsonWithNode(url, options) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
-    const lib = parsed.protocol === "https:" ? https : http;
+    const transport = parsed.protocol === "https:" ? https : http;
     const requestOptions = {
       method: options.method || "GET",
       hostname: parsed.hostname,
@@ -91,14 +94,14 @@ function requestJsonWithHttp(url, options) {
       headers: options.headers || {},
     };
 
-    const req = lib.request(requestOptions, (res) => {
+    const req = transport.request(requestOptions, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => {
         body += chunk;
       });
       res.on("end", () => {
-        const data = safeJsonParse(body);
+        const data = parseJsonSafely(body);
         const status = res.statusCode || 0;
         resolve({
           ok: status >= 200 && status < 300,
@@ -110,7 +113,7 @@ function requestJsonWithHttp(url, options) {
     });
 
     req.on("error", (err) => reject(err));
-    req.setTimeout(config.timeoutMs, () => {
+    req.setTimeout(runtimeConfig.timeoutMs, () => {
       req.destroy(new Error("request_timeout"));
     });
 
@@ -126,7 +129,7 @@ async function requestJson(url, options) {
     const controller =
       typeof AbortController === "function" ? new AbortController() : null;
     const timeoutId = controller
-      ? setTimeout(() => controller.abort(), config.timeoutMs)
+      ? setTimeout(() => controller.abort(), runtimeConfig.timeoutMs)
       : null;
     try {
       const response = await fetch(url, {
@@ -137,7 +140,7 @@ async function requestJson(url, options) {
       return {
         ok: response.ok,
         status: response.status,
-        data: safeJsonParse(text),
+        data: parseJsonSafely(text),
         raw: text,
       };
     } finally {
@@ -147,53 +150,53 @@ async function requestJson(url, options) {
     }
   }
 
-  return requestJsonWithHttp(url, options);
+  return requestJsonWithNode(url, options);
 }
 
 async function Log(stack, level, packageName, message) {
-  const normalizedStack = normalizeValue(stack);
-  const normalizedLevel = normalizeValue(level);
-  const normalizedPackage = normalizeValue(packageName);
+  const stackName = normalizeText(stack);
+  const levelName = normalizeText(level);
+  const packageKey = normalizeText(packageName);
 
-  let normalizedMessage = "";
+  let payloadMessage = "";
   if (typeof message === "string") {
-    normalizedMessage = message;
+    payloadMessage = message;
   } else {
     try {
-      normalizedMessage = JSON.stringify(message);
+      payloadMessage = JSON.stringify(message);
     } catch (err) {
-      normalizedMessage = String(message);
+      payloadMessage = String(message);
     }
   }
 
-  if (!ALLOWED_STACKS.has(normalizedStack)) {
+  if (!STACK_ALLOWLIST.has(stackName)) {
     return { ok: false, error: "invalid_stack" };
   }
-  if (!ALLOWED_LEVELS.has(normalizedLevel)) {
+  if (!LEVEL_ALLOWLIST.has(levelName)) {
     return { ok: false, error: "invalid_level" };
   }
-  if (!isPackageAllowed(normalizedStack, normalizedPackage)) {
+  if (!isAllowedPackage(stackName, packageKey)) {
     return { ok: false, error: "invalid_package" };
   }
-  if (!normalizedMessage) {
+  if (!payloadMessage) {
     return { ok: false, error: "invalid_message" };
   }
 
   const headers = { "Content-Type": "application/json" };
-  const authHeader = getAuthHeader();
+  const authHeader = buildAuthHeader();
   if (authHeader) {
     headers.Authorization = authHeader;
   }
 
   const payload = JSON.stringify({
-    stack: normalizedStack,
-    level: normalizedLevel,
-    package: normalizedPackage,
-    message: normalizedMessage,
+    stack: stackName,
+    level: levelName,
+    package: packageKey,
+    message: payloadMessage,
   });
 
   try {
-    const result = await requestJson(`${config.baseUrl}/logs`, {
+    const result = await requestJson(`${runtimeConfig.baseUrl}/logs`, {
       method: "POST",
       headers,
       body: payload,
@@ -220,11 +223,11 @@ async function Log(stack, level, packageName, message) {
 
 module.exports = {
   Log,
-  configureLogging,
-  DEFAULT_BASE_URL,
-  DEFAULT_AUTH_TOKEN,
-  ALLOWED_STACKS,
-  ALLOWED_LEVELS,
-  BACKEND_PACKAGES,
-  SHARED_PACKAGES,
+  setLogConfig,
+  LOG_SERVICE_URL,
+  FALLBACK_AUTH_TOKEN,
+  STACK_ALLOWLIST,
+  LEVEL_ALLOWLIST,
+  BACKEND_PACKAGE_SET,
+  SHARED_PACKAGE_SET,
 };

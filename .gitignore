@@ -3,6 +3,3 @@ dist
 .env
 .env.local
 *.log
-instructions.txt
-notifications_system_design.md
-notification.txt

@@ -1,36 +1,36 @@
-function normalizeDepot(raw) {
+function mapDepot(raw) {
   if (!raw || typeof raw !== "object") {
     return null;
   }
-  const id = Number(raw.ID);
-  const hours = Number(raw.MechanicHours);
-  if (!Number.isFinite(id) || !Number.isFinite(hours) || hours < 0) {
+  const depotId = Number(raw.ID);
+  const hoursAvailable = Number(raw.MechanicHours);
+  if (!Number.isFinite(depotId) || !Number.isFinite(hoursAvailable) || hoursAvailable < 0) {
     return null;
   }
-  return { ID: id, MechanicHours: Math.floor(hours) };
+  return { ID: depotId, MechanicHours: Math.floor(hoursAvailable) };
 }
 
-function normalizeVehicle(raw) {
+function mapVehicle(raw) {
   if (!raw || typeof raw !== "object") {
     return null;
   }
   const taskId = String(raw.TaskID || "").trim();
-  const duration = Number(raw.Duration);
-  const impact = Number(raw.Impact);
+  const durationHours = Number(raw.Duration);
+  const impactScore = Number(raw.Impact);
   if (!taskId) {
     return null;
   }
-  if (!Number.isFinite(duration) || duration <= 0) {
+  if (!Number.isFinite(durationHours) || durationHours <= 0) {
     return null;
   }
-  if (!Number.isFinite(impact) || impact < 0) {
+  if (!Number.isFinite(impactScore) || impactScore < 0) {
     return null;
   }
   return {
     TaskID: taskId,
-    Duration: Math.floor(duration),
-    Impact: Math.floor(impact),
+    Duration: Math.floor(durationHours),
+    Impact: Math.floor(impactScore),
   };
 }
 
-module.exports = { normalizeDepot, normalizeVehicle };
+module.exports = { mapDepot, mapVehicle };

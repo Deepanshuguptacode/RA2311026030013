@@ -1,33 +1,33 @@
 const express = require("express");
-const { initLogger, safeLog, setAuthToken } = require("./logger");
-const { DEFAULT_AUTH_TOKEN } = require("../../logging_middleware");
-const { fetchDepots, fetchVehicles } = require("./api");
-const { buildSchedule } = require("./scheduler");
+const { startLogger, logEvent, updateAuthToken } = require("./logger");
+const { FALLBACK_AUTH_TOKEN } = require("../../logging_middleware");
+const { loadDepots, loadVehicles } = require("./api");
+const { createPlan } = require("./scheduler");
 
-async function buildSchedules(depotId, authHeader) {
-  const depots = await fetchDepots(authHeader);
-  const vehicles = await fetchVehicles(authHeader);
+async function compileSchedules(depotId, authHeader) {
+  const depotList = await loadDepots(authHeader);
+  const taskList = await loadVehicles(authHeader);
 
-  const selectedDepots = Number.isFinite(depotId)
-    ? depots.filter((depot) => depot.ID === depotId)
-    : depots;
+  const targetDepots = Number.isFinite(depotId)
+    ? depotList.filter((depot) => depot.ID === depotId)
+    : depotList;
 
   const schedules = [];
-  for (const depot of selectedDepots) {
-    const schedule = buildSchedule(vehicles, depot.MechanicHours);
+  for (const depot of targetDepots) {
+    const plan = createPlan(taskList, depot.MechanicHours);
     schedules.push({
       depotId: depot.ID,
       mechanicHours: depot.MechanicHours,
-      totalImpact: schedule.totalImpact,
-      totalDuration: schedule.totalDuration,
-      tasks: schedule.tasks,
+      totalImpact: plan.totalImpact,
+      totalDuration: plan.totalDuration,
+      tasks: plan.tasks,
     });
 
-    await safeLog(
+    await logEvent(
       "backend",
       "info",
       "service",
-      `depot ${depot.ID} scheduled ${schedule.tasks.length} tasks impact ${schedule.totalImpact}`
+      `depot ${depot.ID} scheduled ${plan.tasks.length} tasks impact ${plan.totalImpact}`
     );
   }
 
@@ -37,9 +37,9 @@ async function buildSchedules(depotId, authHeader) {
   };
 }
 
-async function startServer() {
-  initLogger();
-  await safeLog(
+async function startApi() {
+  startLogger();
+  await logEvent(
     "backend",
     "info",
     "service",
@@ -53,14 +53,14 @@ async function startServer() {
     const authHeader = typeof req.headers.authorization === "string"
       ? req.headers.authorization
       : "";
-    const effectiveAuth = authHeader || DEFAULT_AUTH_TOKEN;
+    const effectiveAuth = authHeader || FALLBACK_AUTH_TOKEN;
     if (effectiveAuth) {
-      setAuthToken(effectiveAuth);
+      updateAuthToken(effectiveAuth);
     }
     const startedAt = Date.now();
     res.on("finish", () => {
       const durationMs = Date.now() - startedAt;
-      safeLog(
+      logEvent(
         "backend",
         "info",
         "route",
@@ -78,9 +78,9 @@ async function startServer() {
     const authHeader = typeof req.headers.authorization === "string"
       ? req.headers.authorization.trim()
       : "";
-    const effectiveAuth = authHeader || DEFAULT_AUTH_TOKEN;
+    const effectiveAuth = authHeader || FALLBACK_AUTH_TOKEN;
     if (effectiveAuth) {
-      setAuthToken(effectiveAuth);
+      updateAuthToken(effectiveAuth);
     }
 
     const depotIdRaw = typeof req.query.depotId === "string"
@@ -88,7 +88,7 @@ async function startServer() {
       : Number.NaN;
 
     if (req.query.depotId && !Number.isFinite(depotIdRaw)) {
-      await safeLog(
+      await logEvent(
         "backend",
         "warn",
         "route",
@@ -97,7 +97,7 @@ async function startServer() {
       return res.status(400).json({ error: "invalid_depot_id" });
     }
 
-    await safeLog(
+    await logEvent(
       "backend",
       "info",
       "route",
@@ -105,13 +105,13 @@ async function startServer() {
     );
 
     try {
-      const payload = await buildSchedules(depotIdRaw, effectiveAuth);
+      const payload = await compileSchedules(depotIdRaw, effectiveAuth);
       return res.json(payload);
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       const source = err && err.source ? err.source : "unknown";
       const status = err && Number.isFinite(err.status) ? err.status : 502;
-      await safeLog(
+      await logEvent(
         "backend",
         "error",
         "service",
@@ -128,13 +128,13 @@ async function startServer() {
 
   app.use((err, req, res, next) => {
     const message = err && err.message ? err.message : String(err);
-    safeLog("backend", "error", "middleware", `unhandled error: ${message}`);
+    logEvent("backend", "error", "middleware", `unhandled error: ${message}`);
     res.status(500).json({ error: "internal_error" });
   });
 
   const port = Number(process.env.PORT) || 3000;
   app.listen(port, () => {
-    safeLog(
+    logEvent(
       "backend",
       "info",
       "service",
@@ -143,8 +143,8 @@ async function startServer() {
   });
 }
 
-startServer().catch(async (err) => {
-  await safeLog(
+startApi().catch(async (err) => {
+  await logEvent(
     "backend",
     "fatal",
     "service",

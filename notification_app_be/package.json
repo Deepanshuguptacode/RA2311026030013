@@ -1,0 +1,13 @@
+{
+  "name": "notification-app-be",
+  "version": "1.0.0",
+  "description": "Campus notifications backend",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
